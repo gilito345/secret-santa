@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secret Santa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script>
+  // ─── CONFIG: paste your Supabase project values here ───────────────────────
+  // Supabase → Project Settings → API (or "API Keys").
+  // Use the PUBLIC key (anon / publishable). Never the service_role / secret key.
+  window.SS_CONFIG = {
+    SUPABASE_URL: "https://tjsjwsfebzjkyvrexxyu.supabase.co",
+    SUPABASE_KEY: "sb_publishable_AMqC-_qQnnsZ_8SDiPw83A_Xsj9V4n9"
+  };
+</script>
+<style>
+  :root{
+    --pine:#123a2c; --pine-2:#0c2a20; --cream:#fbf5e9; --paper:#fffdf7;
+    --red:#c8372d; --red-2:#a52a22; --gold:#d9a441; --ink:#1d1d1b; --muted:#6b6a63;
+    --line:#e7dfcd; --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    min-height:100vh; font-family:"DM Sans",system-ui,sans-serif; color:var(--ink);
+    background:radial-gradient(1200px 600px at 50% -10%, #1c5240 0%, var(--pine) 45%, var(--pine-2) 100%) fixed;
+    display:flex; justify-content:center; padding:28px 16px 60px;
+  }
+  .snow{position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:0}
+  .snow i{position:absolute; top:-10px; width:6px; height:6px; border-radius:50%; background:#fff; opacity:.55; animation:fall linear infinite}
+  @keyframes fall{to{transform:translate3d(var(--dx),110vh,0)}}
+  @media (prefers-reduced-motion: reduce){ .snow{display:none} }
+
+  main{position:relative; z-index:1; width:100%; max-width:440px}
+  header{text-align:center; color:var(--cream); margin-bottom:18px}
+  header .mark{font-size:30px; line-height:1}
+  header h1{font-family:Fraunces,serif; font-weight:700; font-size:34px; margin:6px 0 2px; letter-spacing:-.5px}
+  header p{margin:0; opacity:.75; font-size:14px}
+
+  .card{background:var(--paper); border-radius:var(--radius); padding:22px; box-shadow:0 18px 50px rgba(0,0,0,.35); margin-bottom:14px}
+  .card h2{font-family:Fraunces,serif; font-size:22px; margin:0 0 6px}
+  .card .sub{color:var(--muted); margin:0 0 16px; font-size:14.5px; line-height:1.45}
+  label{display:block; font-size:13px; font-weight:700; margin:12px 0 6px; color:#3d3c37}
+  input{width:100%; font:inherit; font-size:16px; padding:13px 14px; border:1.5px solid var(--line); border-radius:12px; background:#fff; outline:none}
+  input:focus{border-color:var(--pine)}
+  .btn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:16px; padding:14px 16px; font:inherit; font-weight:700; font-size:16px;
+       border:0; border-radius:12px; cursor:pointer; background:var(--red); color:#fff; transition:transform .06s, background .15s}
+  .btn:hover{background:var(--red-2)} .btn:active{transform:scale(.985)}
+  .btn[disabled]{opacity:.5; cursor:not-allowed}
+  .btn.ghost{background:transparent; color:var(--pine); border:1.5px solid var(--line)}
+  .btn.ghost:hover{background:#f5efe1}
+  .btn.small{width:auto; margin:0; padding:8px 12px; font-size:14px}
+  .row{display:flex; gap:8px; align-items:center}
+  .divider{display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; margin:18px 0 4px}
+  .divider:before,.divider:after{content:""; flex:1; height:1px; background:var(--line)}
+  .err{color:var(--red-2); font-size:14px; margin-top:10px; min-height:1px}
+  .err:empty{display:none}
+
+  .people{list-style:none; padding:0; margin:8px 0 0}
+  .people li{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:15.5px}
+  .people li:last-child{border-bottom:0}
+  .avatar{width:32px; height:32px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:13px; color:#fff; flex:none}
+  .people .name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tag{font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:99px; background:#f1ead9; color:#6b5a2c}
+  .tag.done{background:#e3efe8; color:#1c5a40}
+  .x{background:none; border:0; color:var(--muted); font-size:20px; cursor:pointer; padding:0 4px; line-height:1}
+  .x:hover{color:var(--red)}
+
+  .linkbox{display:flex; gap:8px; margin-top:8px}
+  .linkbox input{font-size:13px; padding:10px 12px; color:var(--muted); background:#faf7ef}
+  .note{font-size:13px; color:var(--muted); line-height:1.45; margin-top:10px}
+  .pill{display:inline-block; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--gold); margin-bottom:6px}
+
+  /* Draw stage */
+  .stage{text-align:center; padding:28px 22px}
+  .reel{position:relative; height:84px; margin:18px auto 6px; border-radius:14px; background:var(--pine); overflow:hidden;
+        display:grid; place-items:center; box-shadow:inset 0 0 0 3px var(--gold), inset 0 10px 24px rgba(0,0,0,.35)}
+  .reel span{font-family:Fraunces,serif; font-size:30px; font-weight:700; color:var(--cream); padding:0 14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+  .reel.spinning span{filter:blur(.4px)}
+  .tagcard{margin:18px auto 0; max-width:300px; background:var(--cream); border:2px dashed var(--gold); border-radius:16px; padding:20px 18px; transform-origin:top center}
+  .tagcard.pop{animation:pop .55s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes pop{0%{transform:scale(.6) rotate(-6deg); opacity:0}100%{transform:none; opacity:1}}
+  .tagcard small{display:block; color:var(--muted); font-size:13px}
+  .tagcard strong{display:block; font-family:Fraunces,serif; font-size:36px; color:var(--red); margin-top:4px; word-break:break-word}
+  .bigbtn{font-size:18px; padding:18px}
+  .confetti{position:fixed; inset:0; pointer-events:none; z-index:5}
+  .hidden{display:none !important}
+  .center{text-align:center}
+  .spinner{width:22px; height:22px; border:3px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin 0.8s linear infinite; margin:30px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .confirm{background:#fff6e8; border:1px solid #f0d9ae; border-radius:12px; padding:12px; margin-top:12px; font-size:14px}
+</style>
+</head>
+<body>
+<div class="snow" id="snow" aria-hidden="true"></div>
+<canvas class="confetti" id="confetti"></canvas>
+<main>
+  <header>
+    <div class="mark">🎁</div>
+    <h1 id="hdrTitle">Secret Santa</h1>
+    <p id="hdrSub">One loop. No peeking.</p>
+  </header>
+  <div id="app"><div class="spinner"></div></div>
+</main>
+
+<script>
+(() => {
+  const CFG = window.SS_CONFIG || {};
+  const app = document.getElementById('app');
+  const POLL_MS = 4000;
+  let pollTimer = null, busy = false, lastInfo = null, revealed = null, confirming = null;
+
+  // ---------- tiny helpers ----------
+  const h = (tag, attrs = {}, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k === 'text') el.textContent = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+    return el;
+  };
+  const store = {
+    get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v){ try { localStorage.setItem(k, v); } catch {} },
+    del(k){ try { localStorage.removeItem(k); } catch {} }
+  };
+  const params = new URLSearchParams(location.search);
+  const baseUrl = location.origin + location.pathname;
+  const inviteUrl = code => `${baseUrl}?g=${code}`;
+  const personalUrl = (code, token) => `${baseUrl}?g=${code}&p=${token}`;
+  const colors = ['#c8372d','#1c6b4f','#d9a441','#7a4fa3','#2d6fa8','#b35a2a','#4b8a3e','#a3335f'];
+  const colorFor = s => colors[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % colors.length];
+
+  async function rpc(fn, args) {
+    const headers = { 'apikey': CFG.SUPABASE_KEY, 'Content-Type': 'application/json' };
+    if (String(CFG.SUPABASE_KEY).startsWith('eyJ')) headers.Authorization = 'Bearer ' + CFG.SUPABASE_KEY;
+    let r;
+    try {
+      r = await fetch(CFG.SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/rpc/' + fn, {
+        method: 'POST', headers, body: JSON.stringify(args)
+      });
+    } catch { throw new Error("Couldn't reach the server. Check your connection and try again."); }
+    const text = await r.text();
+    let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (!r.ok) throw new Error((data && data.message) || 'Something went wrong. Try again.');
+    return data;
+  }
+
+  async function copy(text, btn) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const t = h('textarea', {}, text); document.body.append(t); t.select();
+      try { document.execCommand('copy'); } catch {} t.remove();
+    }
+    if (btn) { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = o, 1400); }
+  }
+  async function share(text, url, btn) {
+    if (navigator.share) { try { await navigator.share({ title: 'Secret Santa', text, url }); return; } catch {} }
+    copy(url, btn);
+  }
+
+  function withBusy(btn, errEl, fn) {
+    return async (e) => {
+      e && e.preventDefault();
+      if (busy) return;
+      busy = true; errEl && (errEl.textContent = '');
+      const label = btn.textContent; btn.disabled = true; btn.textContent = 'One sec…';
+      try { await fn(); }
+      catch (err) { errEl ? errEl.textContent = err.message : alert(err.message); }
+      finally { busy = false; if (btn.isConnected) { btn.disabled = false; btn.textContent = label; } }
+    };
+  }
+
+  function setHeader(title, sub) {
+    document.getElementById('hdrTitle').textContent = title || 'Secret Santa';
+    document.getElementById('hdrSub').textContent = sub || 'One loop. No peeking.';
+  }
+  function render(...cards) { app.replaceChildren(...cards); }
+
+  // ---------- state ----------
+  let code = (params.get('g') || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || null;
+  if (code && params.get('p')) {
+    store.set('ss:' + code, params.get('p'));
+    history.replaceState(null, '', inviteUrl(code));   // keep the secret token out of the address bar
+  }
+  const tokenFor = c => store.get('ss:' + c);
+
+  // ---------- views ----------
+  function viewConfigMissing() {
+    setHeader('Almost ready');
+    render(h('div', { class: 'card' },
+      h('h2', { text: 'Connect your database' }),
+      h('p', { class: 'sub' }, 'Open index.html and paste your Supabase project URL and public key into SS_CONFIG near the top. Then reload this page.')
+    ));
+  }
+
+  function viewHome() {
+    setHeader('Secret Santa', 'Start a draw and send everyone the link.');
+    const err = h('div', { class: 'err' }), err2 = h('div', { class: 'err' });
+    const title = h('input', { placeholder: 'e.g. Family Christmas 2026', maxlength: 60 });
+    const name = h('input', { placeholder: 'Your name', maxlength: 40, autocomplete: 'given-name' });
+    const go = h('button', { class: 'btn', type: 'submit', text: 'Create game' });
+    const form = h('form', {}, h('label', { text: 'Name of the exchange' }), title, h('label', { text: 'Your name' }), name, go, err);
+    form.addEventListener('submit', withBusy(go, err, async () => {
+      if (!name.value.trim()) throw new Error('Add your name. You’re in the draw too.');
+      const res = await rpc('create_game', { p_title: title.value, p_host_name: name.value });
+      store.set('ss:' + res.code, res.token);
+      code = res.code; history.replaceState(null, '', inviteUrl(code));
+      start();
+    }));
+    const codeIn = h('input', { placeholder: 'Game code', maxlength: 6, style: 'text-transform:uppercase' });
+    const joinBtn = h('button', { class: 'btn ghost small', type: 'submit', text: 'Go' });
+    const joinForm = h('form', { class: 'row' }, codeIn, joinBtn);
+    joinForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const c = codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (c.length !== 6) { err2.textContent = 'Codes are 6 characters.'; return; }
+      code = c; history.replaceState(null, '', inviteUrl(code)); start();
+    });
+    render(h('div', { class: 'card' },
+      h('h2', { text: 'Host a Secret Santa' }),
+      h('p', { class: 'sub' }, 'Everyone joins from the link. When you’re ready, names are drawn in one big loop, and each person only ever sees their own.'),
+      form,
+      h('div', { class: 'divider', text: 'or join one' }),
+      joinForm, err2
+    ));
+  }
+
+  function peopleList(info, { showDrawn, removable }) {
+    return h('ul', { class: 'people' }, info.participants.map(p => h('li', {},
+      h('span', { class: 'avatar', style: `background:${colorFor(p.name)}`, text: p.name.trim()[0].toUpperCase() }),
+      h('span', { class: 'name', text: p.name + (info.me && p.id === info.me.id ? ' (you)' : '') }),
+      p.is_host ? h('span', { class: 'tag', text: 'Host' }) : null,
+      showDrawn ? h('span', { class: 'tag' + (p.has_drawn ? ' done' : ''), text: p.has_drawn ? 'Drawn ✓' : 'Waiting' }) : null,
+      removable && !p.is_host ? h('button', { class: 'x', title: 'Remove ' + p.name, 'aria-label': 'Remove ' + p.name, text: '×',
+        onclick: async () => {
+          if (confirming !== 'rm:' + p.id) { confirming = 'rm:' + p.id; draw(info); return; }
+          confirming = null;
+          try { await rpc('remove_participant', { p_code: code, p_token: tokenFor(code), p_participant_id: p.id }); } catch (e) { alert(e.message); }
+          refresh();
+        } }) : null
+    )));
+  }
+
+  function viewJoin(info) {
+    setHeader(info.title, `Code ${info.code} · ${info.participants.length} joined`);
+    if (info.status !== 'open') {
+      return render(h('div', { class: 'card' },
+        h('h2', { text: 'Names have been drawn' }),
+        h('p', { class: 'sub' }, 'This draw is closed to new people. If you already joined, open the personal link you saved when you signed up (or use the same phone and browser).'),
+        h('p', { class: 'note' }, 'Missed it? Ask the host to reset the draw so you can join.')
+      ));
+    }
+    const err = h('div', { class: 'err' });
+    const name = h('input', { placeholder: 'Your name', maxlength: 40, autocomplete: 'given-name' });
+    const go = h('button', { class: 'btn', type: 'submit', text: 'Join the draw' });
+    const form = h('form', {}, h('label', { text: 'Your name' }), name, go, err);
+    form.addEventListener('submit', withBusy(go, err, async () => {
+      const res = await rpc('join_game', { p_code: code, p_name: name.value });
+      store.set('ss:' + code, res.token);
+      start();
+    }));
+    render(
+      h('div', { class: 'card' },
+        h('span', { class: 'pill', text: 'You’re invited' }),
+        h('h2', { text: 'Add your name' }),
+        h('p', { class: 'sub' }, 'Use the name everyone knows you by. When the host is ready, you’ll come back here to draw.'),
+        form),
+      h('div', { class: 'card' }, h('h2', { text: 'Who’s in so far' }), peopleList(info, {}))
+    );
+  }
+
+  function personalLinkCard(info) {
+    const url = personalUrl(info.code, tokenFor(info.code));
+    const b = h('button', { class: 'btn ghost small', text: 'Copy' });
+    b.onclick = () => copy(url, b);
+    return h('div', { class: 'card' },
+      h('h2', { text: 'Your personal link' }),
+      h('p', { class: 'sub' }, 'This browser remembers you. To draw on another device, save this link. It’s just for you, so don’t share it.'),
+      h('div', { class: 'linkbox' }, h('input', { readonly: true, value: url, onfocus: e => e.target.select() }), b)
+    );
+  }
+
+  function viewLobby(info) {
+    const me = info.me, n = info.participants.length;
+    setHeader(info.title, `Code ${info.code} · ${n} joined`);
+    const cards = [];
+    if (me.is_host) {
+      const url = inviteUrl(info.code);
+      const shareBtn = h('button', { class: 'btn ghost small', text: navigator.share ? 'Share' : 'Copy' });
+      shareBtn.onclick = () => share(`Join our Secret Santa: ${info.title}`, url, shareBtn);
+      const err = h('div', { class: 'err' });
+      const drawBtn = h('button', { class: 'btn', disabled: n < 3, text: n < 3 ? `Need ${3 - n} more to draw` : 'Everyone’s in. Make assignments' });
+      const box = [];
+      if (confirming === 'draw') {
+        const yes = h('button', { class: 'btn', text: `Yes, lock ${n} people & draw` });
+        yes.onclick = withBusy(yes, err, async () => {
+          confirming = null;
+          await rpc('start_draw', { p_code: code, p_token: tokenFor(code) });
+          await refresh();
+        });
+        box.push(h('div', { class: 'confirm' },
+          'This closes sign-ups and quietly builds one loop. Nobody sees the list, including you.',
+          yes, h('button', { class: 'btn ghost', text: 'Not yet', onclick: () => { confirming = null; draw(info); } })));
+      } else drawBtn.onclick = () => { confirming = 'draw'; draw(info); };
+      cards.push(h('div', { class: 'card' },
+        h('span', { class: 'pill', text: 'You’re the host' }),
+        h('h2', { text: 'Invite everyone' }),
+        h('p', { class: 'sub' }, 'Send this link to the group. People appear below as they join.'),
+        h('div', { class: 'linkbox' }, h('input', { readonly: true, value: url, onfocus: e => e.target.select() }), shareBtn),
+        confirming === 'draw' ? box : drawBtn, err
+      ));
+    } else {
+      cards.push(h('div', { class: 'card center' },
+        h('span', { class: 'pill', text: 'You’re in' }),
+        h('h2', {}, `Hi ${me.name}!`),
+        h('p', { class: 'sub', style: 'margin:0' }, 'Waiting for the host to draw names. Keep this page open, or come back later. It updates by itself.')
+      ));
+    }
+    const rmHint = me.is_host && confirming && confirming.startsWith('rm:') ? h('p', { class: 'note' }, 'Tap × again to remove them.') : null;
+    cards.push(h('div', { class: 'card' }, h('h2', { text: `Who’s in (${n})` }), peopleList(info, { removable: me.is_host }), rmHint));
+    cards.push(personalLinkCard(info));
+    render(...cards);
+  }
+
+  function viewDrawn(info) {
+    const me = info.me;
+    const done = info.participants.filter(p => p.has_drawn).length;
+    setHeader(info.title, `${done} of ${info.participants.length} have drawn`);
+    const cards = [];
+    const err = h('div', { class: 'err' });
+    const reel = h('div', { class: 'reel' }, h('span', { text: '? ? ?' }));
+    const result = h('div', { class: 'hidden' });
+
+    const showResult = (name, animate) => {
+      result.className = '';
+      result.replaceChildren(h('div', { class: 'tagcard' + (animate ? ' pop' : '') },
+        h('small', { text: 'You’re Secret Santa for' }), h('strong', { text: name })),
+        h('button', { class: 'btn ghost', text: 'Hide it', onclick: () => { revealed = null; draw(lastInfo); } }));
+    };
+
+    let btn;
+    if (revealed) {
+      reel.firstChild.textContent = revealed;
+      showResult(revealed, false);
+    } else {
+      btn = h('button', { class: 'btn bigbtn', text: me.has_drawn ? 'Show my name again' : 'Draw a name 🎄' });
+      btn.onclick = withBusy(btn, err, async () => {
+        stopPolling();
+        const { receiver } = await rpc('reveal', { p_code: code, p_token: tokenFor(code) });
+        btn.classList.add('hidden');
+        if (me.has_drawn) { revealed = receiver; reel.firstChild.textContent = receiver; showResult(receiver, true); startPolling(); return; }
+        await spin(reel, info.participants.filter(p => p.id !== me.id).map(p => p.name), receiver);
+        revealed = receiver;
+        showResult(receiver, true);
+        burst();
+        startPolling();
+      });
+    }
+
+    cards.push(h('div', { class: 'card stage' },
+      h('span', { class: 'pill', text: 'Names are in the hat' }),
+      h('h2', {}, me.has_drawn || revealed ? `${me.name}, here’s your person` : `Your turn, ${me.name}`),
+      h('p', { class: 'sub', style: 'margin:0' }, 'Make sure nobody’s looking over your shoulder.'),
+      reel, btn, result, err));
+
+    if (me.is_host) {
+      const herr = h('div', { class: 'err' });
+      let resetArea;
+      if (confirming === 'reset') {
+        const yes = h('button', { class: 'btn', text: 'Yes, scrap it & reopen sign-ups' });
+        yes.onclick = withBusy(yes, herr, async () => { confirming = null; revealed = null; await rpc('reset_draw', { p_code: code, p_token: tokenFor(code) }); await refresh(); });
+        resetArea = h('div', { class: 'confirm' }, 'Everyone’s assignment will be thrown away. Anyone who already drew will have to draw again.',
+          yes, h('button', { class: 'btn ghost', text: 'Cancel', onclick: () => { confirming = null; draw(info); } }));
+      } else {
+        resetArea = h('button', { class: 'btn ghost', text: 'Reset the draw', onclick: () => { confirming = 'reset'; draw(info); } });
+      }
+      cards.push(h('div', { class: 'card' },
+        h('span', { class: 'pill', text: 'Host view' }),
+        h('h2', { text: 'Who has drawn' }),
+        h('p', { class: 'sub' }, 'You can see who has drawn, never who they got.'),
+        peopleList(info, { showDrawn: true }), resetArea, herr));
+    }
+    cards.push(personalLinkCard(info));
+    render(...cards);
+  }
+
+  // ---------- the "live" draw ----------
+  function spin(reel, names, finalName) {
+    return new Promise(resolve => {
+      const span = reel.firstChild;
+      const pool = names.length ? names.slice() : [finalName];
+      for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const total = reduce ? 600 : 3800;
+      const t0 = performance.now();
+      let i = 0, last = '';
+      reel.classList.add('spinning');
+      const tick = () => {
+        const p = Math.min(1, (performance.now() - t0) / total);
+        if (p >= 1) { span.textContent = finalName; reel.classList.remove('spinning'); return setTimeout(resolve, 350); }
+        let next = pool[i++ % pool.length];
+        if (next === last && pool.length > 1) next = pool[i++ % pool.length];
+        span.textContent = last = next;
+        setTimeout(tick, 45 + 380 * p * p * p);   // fast, then slows down like a wheel
+      };
+      tick();
+    });
+  }
+
+  function burst() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const c = document.getElementById('confetti'), ctx = c.getContext('2d');
+    c.width = innerWidth * devicePixelRatio; c.height = innerHeight * devicePixelRatio; ctx.scale(devicePixelRatio, devicePixelRatio);
+    const cols = ['#c8372d', '#d9a441', '#ffffff', '#2f8a63'];
+    const bits = Array.from({ length: 140 }, () => ({
+      x: innerWidth / 2, y: innerHeight * 0.42, vx: (Math.random() - .5) * 12, vy: -Math.random() * 12 - 4,
+      r: Math.random() * 6 + 3, a: Math.random() * 6, va: (Math.random() - .5) * .3, c: cols[Math.floor(Math.random() * cols.length)]
+    }));
+    const t0 = performance.now();
+    (function frame(t) {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      for (const b of bits) {
+        b.vy += .32; b.vx *= .99; b.x += b.vx; b.y += b.vy; b.a += b.va;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillStyle = b.c; ctx.fillRect(-b.r / 2, -b.r / 4, b.r, b.r / 2); ctx.restore();
+      }
+      if (t - t0 < 2600) requestAnimationFrame(frame); else ctx.clearRect(0, 0, innerWidth, innerHeight);
+    })(t0);
+  }
+
+  // ---------- routing / polling ----------
+  function draw(info) {
+    lastInfo = info;
+    if (!info.me) return viewJoin(info);
+    if (info.status === 'open') return viewLobby(info);
+    return viewDrawn(info);
+  }
+
+  async function refresh() {
+    if (!code) return;
+    const tok = tokenFor(code);
+    const info = await rpc('game_info', { p_code: code, p_token: tok || null });
+    if (tok && !info.me) store.del('ss:' + code);       // stale token (e.g. removed by host)
+    if (info.status === 'open') revealed = null;
+    if (busy) return;                                                    // mid-action or mid-animation
+    if (lastInfo && JSON.stringify(lastInfo) === JSON.stringify(info) && app.querySelector('.card')) return;  // nothing changed
+    const typing = document.activeElement && document.activeElement.tagName === 'INPUT' && !document.activeElement.readOnly;
+    const sameShape = lastInfo && lastInfo.status === info.status && !!lastInfo.me === !!info.me;
+    if (typing && sameShape) { lastInfo = info; return; }               // don't wipe what someone is typing
+    draw(info);
+  }
+  function startPolling() { stopPolling(); pollTimer = setInterval(() => refresh().catch(() => {}), POLL_MS); }
+  function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && code) refresh().catch(() => {}); });
+
+  async function start() {
+    if (!CFG.SUPABASE_URL || CFG.SUPABASE_URL.includes('YOUR-PROJECT') || !CFG.SUPABASE_KEY || CFG.SUPABASE_KEY.startsWith('YOUR-')) return viewConfigMissing();
+    if (!code) { stopPolling(); return viewHome(); }
+    render(h('div', { class: 'spinner' }));
+    try { await refresh(); startPolling(); }
+    catch (e) {
+      stopPolling(); setHeader('Hmm');
+      render(h('div', { class: 'card' }, h('h2', { text: 'Couldn’t open that game' }), h('p', { class: 'sub', text: e.message }),
+        h('button', { class: 'btn ghost', text: 'Start over', onclick: () => { code = null; history.replaceState(null, '', baseUrl); start(); } })));
+    }
+  }
+
+  // snow
+  const snow = document.getElementById('snow');
+  for (let i = 0; i < 36; i++) {
+    const s = h('i'); const size = Math.random() * 4 + 2;
+    s.style.cssText = `left:${Math.random() * 100}%;width:${size}px;height:${size}px;animation-duration:${8 + Math.random() * 10}s;animation-delay:${-Math.random() * 18}s;--dx:${(Math.random() - .5) * 80}px;opacity:${.25 + Math.random() * .5}`;
+    snow.append(s);
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
