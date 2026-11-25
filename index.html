@@ -387,9 +387,54 @@
         h('h2', { text: 'Who has drawn' }),
         h('p', { class: 'sub' }, 'You can see who has drawn, never who they got.'),
         peopleList(info, { showDrawn: true }), resetArea, herr));
+      cards.push(lateJoinerCard(info));
     }
     cards.push(personalLinkCard(info));
     render(...cards);
+  }
+
+  // ---------- host: late joiner ----------
+  let lateLink = null;   // { name, url } shown after adding someone
+  const lateDraft = { name: '', after: '' };   // survives background refreshes
+  function lateJoinerCard(info) {
+    const err = h('div', { class: 'err' });
+    if (lateLink) {
+      const copyBtn = h('button', { class: 'btn ghost small', text: 'Copy' });
+      copyBtn.onclick = () => copy(lateLink.url, copyBtn);
+      return h('div', { class: 'card' },
+        h('span', { class: 'pill', text: 'Late joiner added' }),
+        h('h2', {}, `Send this to ${lateLink.name}`),
+        h('p', { class: 'sub' }, 'This is their personal link, so send it to them privately. Don’t open it yourself, or this phone will switch to being them.'),
+        h('div', { class: 'linkbox' }, h('input', { readonly: true, value: lateLink.url, onfocus: e => e.target.select() }), copyBtn),
+        h('p', { class: 'note' }, `Also tell ${lateLink.after} to open the app and draw again. Their person has changed.`),
+        h('button', { class: 'btn ghost', text: 'Done', onclick: () => { lateLink = null; draw(lastInfo); } }));
+    }
+    const name = h('input', { placeholder: 'Their name', maxlength: 40, value: lateDraft.name, oninput: e => lateDraft.name = e.target.value });
+    const sel = h('select', { style: 'width:100%;font:inherit;font-size:16px;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff' },
+      h('option', { value: '', text: 'Choose someone…' }),
+      // People who haven't drawn yet first: picking one of them changes nothing anyone has seen
+      [...info.participants].sort((a, b) => a.has_drawn - b.has_drawn).map(p =>
+        h('option', { value: p.id, selected: p.id === lateDraft.after, text: p.name + (p.has_drawn ? ' (already drawn, will need to redraw)' : '') })));
+    sel.onchange = () => lateDraft.after = sel.value;
+    const go = h('button', { class: 'btn', type: 'submit', text: 'Add & get their link' });
+    const form = h('form', {}, h('label', { text: 'Late joiner’s name' }), name,
+      h('label', { text: 'Slot them in right after…' }), sel,
+      h('p', { class: 'note' }, 'The person you pick will now buy for the newcomer, and the newcomer takes over who that person had. Nobody else changes, and you still won’t see any names. Picking someone who hasn’t drawn yet is smoothest.'),
+      go, err);
+    form.addEventListener('submit', withBusy(go, err, async () => {
+      if (!name.value.trim()) throw new Error('Add their name.');
+      if (!sel.value) throw new Error('Choose who to slot them in after.');
+      const after = info.participants.find(p => p.id === sel.value);
+      const res = await rpc('add_late_joiner', { p_code: code, p_token: tokenFor(code), p_name: name.value, p_after_id: sel.value });
+      lateDraft.name = ''; lateDraft.after = '';
+      lateLink = { name: name.value.trim(), after: after ? after.name : 'that person', url: personalUrl(res.code, res.token) };
+      draw(await rpc('game_info', { p_code: code, p_token: tokenFor(code) }));
+    }));
+    return h('div', { class: 'card' },
+      h('span', { class: 'pill', text: 'Host only' }),
+      h('h2', { text: 'Add a late joiner' }),
+      h('p', { class: 'sub' }, 'Add someone without redrawing everyone.'),
+      form);
   }
 
   // ---------- the "live" draw ----------
@@ -448,10 +493,11 @@
     const tok = tokenFor(code);
     const info = await rpc('game_info', { p_code: code, p_token: tok || null });
     if (tok && !info.me) store.del('ss:' + code);       // stale token (e.g. removed by host)
-    if (info.status === 'open') revealed = null;
+    if (info.status === 'open' || (info.me && !info.me.has_drawn)) revealed = null;   // e.g. their person changed
     if (busy) return;                                                    // mid-action or mid-animation
     if (lastInfo && JSON.stringify(lastInfo) === JSON.stringify(info) && app.querySelector('.card')) return;  // nothing changed
-    const typing = document.activeElement && document.activeElement.tagName === 'INPUT' && !document.activeElement.readOnly;
+    const ae = document.activeElement;
+    const typing = ae && ((ae.tagName === 'INPUT' && !ae.readOnly) || ae.tagName === 'SELECT');
     const sameShape = lastInfo && lastInfo.status === info.status && !!lastInfo.me === !!info.me;
     if (typing && sameShape) { lastInfo = info; return; }               // don't wipe what someone is typing
     draw(info);
